@@ -92,6 +92,19 @@ Vector vec_scale(Vector p, float scale) {
 }
 
 //
+// return a negated vector
+//
+Vector vec_negate(Vector p){
+  Vector ret;
+
+  ret.x = -p.x;
+  ret.y = -p.y;
+  ret.z = -p.z;
+
+  return ret;
+}
+
+//
 // add two RGB colors
 //
 RGB_float clr_add(RGB_float p, RGB_float q) {

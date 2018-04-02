@@ -3,6 +3,7 @@
 #include <math.h>
 #include "global.h"
 #include "sphere.h"
+#include "trace.h"
 
 //
 // Global variables
@@ -37,13 +38,71 @@ extern float decay_b;
 extern float decay_c;
 
 extern int shadow_on;
+extern int reflection_on;
+extern int refraction_on;
+extern int stochastic_on;
 extern int step_max;
+
+// declaration so stochastic/recursive can call each other
+RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step);
 
 /////////////////////////////////////////////////////////////////////
 
 /*********************************************************************
  * Phong illumination - you need to implement this!
  *********************************************************************/
+
+Vector reflect(Vector v, Vector n){
+    float v_dot_n = vec_dot(v, n);
+    Vector n_scaled = vec_scale(n, v_dot_n);
+    Vector n_scaled_2 = vec_scale(n_scaled, 2.0);
+    Vector return_vec = vec_minus(v, n_scaled_2);
+
+    return return_vec;
+}
+
+Vector refract(Vector v, Vector n, Spheres * sph){
+  // This function calculates refracted ray based on index of refraction
+  //
+  // Based off of this web page
+  // https://www.cs.unc.edu/~rademach/xroads-RT/RTarticle.html
+
+  float c1 = -vec_dot(n, v);
+  Vector R1 = vec_plus(v, vec_scale(vec_scale(n, 2), c1));
+
+  float n1 = 1;
+  float n2 = sph->ior;
+  float N = n1 / n2;
+
+  float c2 = sqrt( 1 - N*N * (1 - c1*c1));
+  float norm_scale = ((N * c1) - c2);
+
+  Vector scaled_v = vec_scale(v, N);
+  Vector scaled_n = vec_scale(n, norm_scale);
+
+  Vector refracted_ray = vec_plus(scaled_v, scaled_n);
+  normalize(&refracted_ray);
+
+  return refracted_ray;
+}
+
+void vec_print(Vector v){
+  printf("%f, %f, %f\n", v.x, v.y, v.z);
+}
+
+void set_to_black(RGB_float * c){
+  c->r = 0;
+  c->g = 0;
+  c->b = 0;
+}
+
+RGB_float check_for_negative_rgb(RGB_float c){
+  if (c.r < 0){c.r = 0;}
+  if (c.g < 0){c.g = 0;}
+  if (c.b < 0){c.b = 0;}
+  return c;
+}
+
 RGB_float phong(Point q, Vector v, Vector n, Vector l, Vector r, Spheres *sph) {
 	RGB_float color;
   float d = vec_len(l);  
@@ -103,13 +162,35 @@ RGB_float phong(Point q, Vector v, Vector n, Vector l, Vector r, Spheres *sph) {
 	return color;
 }
 
-Vector calculate_r(Vector v, Vector n){
-    float v_dot_n = vec_dot(v, n);
-    Vector n_scaled = vec_scale(n, v_dot_n);
-    Vector n_scaled_2 = vec_scale(n_scaled, 2.0);
-    Vector return_vec = vec_minus(v, n_scaled_2);
+RGB_float stochastic_ray_trace(Vector ray, int step, Point hit, Spheres * sph){
+  RGB_float color;
+  RGB_float next_color;
+  Vector random_ray;
 
-    return return_vec;
+  for (int i = 0; i < MAX_STOCHASTIC; i++){
+    do {
+      // random floats between -1 and 1
+      random_ray.x = (float)rand() / (float)(RAND_MAX/2) - 1;
+      random_ray.y = (float)rand() / (float)(RAND_MAX/2) - 1;
+      random_ray.z = (float)rand() / (float)(RAND_MAX/2) - 1;
+      
+      // debug
+      // vec_print(random_ray);
+      
+      normalize(&random_ray);
+      normalize(&ray);
+    } while (vec_dot(ray, random_ray) >= .95); // make sure vectors aren't too similar
+
+    next_color = recursive_ray_trace(hit, random_ray, ++step); 
+
+    // ray cast didn't hit a sphere, set to nothing (black)
+    if (next_color.r == background_clr.r){ set_to_black( &next_color ); }
+    
+    clr_add(color, clr_scale(next_color, sph->reflectance));
+  }
+
+  // as colors accumulate they violate 0 <= rgb <= 1, scale them back into range
+  return clr_scale(color, 1/MAX_STOCHASTIC);
 }
 
 /************************************************************************
@@ -117,42 +198,71 @@ Vector calculate_r(Vector v, Vector n){
  * You should decide what arguments to use.
  ************************************************************************/
 RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
-	RGB_float color = background_clr;
-  RGB_float next_color = background_clr;
-
-  Vector next_ray;
+	RGB_float ret_color = background_clr;
+  RGB_float phong_color = background_clr;
+  RGB_float stochastic_color = background_clr;
+  RGB_float reflected_color = background_clr;
+  RGB_float refracted_color = background_clr;
+  Vector reflected_ray;
+  Vector refracted_ray;
   Point hit;
 
+  // check for intersect
+  normalize(&ray);
   Spheres * sph = intersect_scene(initial_pos, ray, scene, &hit, 0);
 
-  if (sph == NULL){ return color; }
-
+  // no intersect, return background color
+  if (sph == NULL){ return background_clr; }
+  
+  // intersect exists, do phong shading
   Vector v = get_vec(eye_pos, hit);
   normalize(&v);
   Vector n = sphere_normal(hit, sph);
   normalize(&n);
   Vector l = get_vec(hit,  light1);
   normalize(&l);
-  Vector r = calculate_r(l, n);
+  Vector r = reflect(l, n);
   normalize(&r);
-  next_ray = calculate_r(v, n);
-
-  color = phong(hit, v, n, l, r, sph);
+  phong_color = phong(hit, v, n, l, r, sph);
+  
+  // initialize return color to phong shaded color
+  ret_color = phong_color;
 
   if (step < step_max){
-    next_color = recursive_ray_trace(hit, next_ray, ++step);
-    
-    // next_color didn't hit a sphere, set to nothing
-    // if (next_color.r == background_clr.r){
-    //   next_color.r = 0;
-    //   next_color.g = 0;
-    //   next_color.b = 0;
-    // }
+    if (stochastic_on){
+      stochastic_color = stochastic_ray_trace(reflected_ray, ++step, hit, sph);
+    }
+    if (reflection_on){
+      reflected_ray = reflect(v, n);
+      normalize(&reflected_ray);
 
-    color = clr_add(color, clr_scale(next_color, sph->reflectance));
+      reflected_color = recursive_ray_trace(hit, reflected_ray, ++step);
+    }
+    if (refraction_on){
+      set_to_black(&ret_color);
+
+      refracted_ray = refract(ray, n, sph);
+      normalize(&refracted_ray);
+
+      refracted_color = recursive_ray_trace(hit, refracted_ray, ++step);
+    }
+
+    // ray cast didn't hit a sphere, set color to nothing (black)
+    if (stochastic_color.r == background_clr.r){ set_to_black(&stochastic_color); }
+    if (refracted_color.r == background_clr.r){ set_to_black(&refracted_color); }
+    if (reflected_color.r == background_clr.r){ set_to_black(&reflected_color); }
+
+    // combine all colors
+    ret_color = clr_add(ret_color, clr_scale(reflected_color, sph->reflectance));
+    ret_color = clr_add(ret_color, refracted_color);
+    ret_color = clr_add(ret_color, stochastic_color);
+
+    // give back to recursing functions
+    return check_for_negative_rgb(ret_color);
   }
 
-  return color;
+  // final return
+  return check_for_negative_rgb(ret_color);
 }
 
 /*********************************************************************

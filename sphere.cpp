@@ -112,7 +112,7 @@ Spheres* intersect_scene(Point u, Vector d, Spheres* sph, Point* hit, int n) {
  *****************************************************/
 Spheres *add_sphere(Spheres *slist, Point ctr, float rad, float amb[],
 		    float dif[], float spe[], float shine, 
-		    float refl, int sindex) {
+		    float refl, float ior, int sindex) {
   Spheres *new_sphere;
 
   new_sphere = (Spheres *)malloc(sizeof(Spheres));
@@ -130,6 +130,7 @@ Spheres *add_sphere(Spheres *slist, Point ctr, float rad, float amb[],
   (new_sphere->mat_specular)[2] = spe[2];
   new_sphere->mat_shineness = shine;
   new_sphere->reflectance = refl;
+  new_sphere->ior = ior;
   new_sphere->next = NULL;
 
   if (slist == NULL) { // first object

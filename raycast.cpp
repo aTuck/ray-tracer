@@ -81,6 +81,7 @@ int step_max = 1;
 int shadow_on     = 0;
 int reflection_on = 0;
 int refraction_on = 0;
+int stochastic_on = 0;
 
 // OpenGL
 const int NumPoints = 6;
@@ -226,6 +227,7 @@ int main( int argc, char **argv )
 		if (strcmp(argv[i], "+s") == 0)	shadow_on     = 1;
 		if (strcmp(argv[i], "+l") == 0)	reflection_on = 1;
 		if (strcmp(argv[i], "+r") == 0)	refraction_on = 1;
+		if (strcmp(argv[i], "+f") == 0)	stochastic_on = 1;
 	}
 
 	//
@@ -234,7 +236,7 @@ int main( int argc, char **argv )
 	// we have used so many global variables and this function is
 	// happy to carry no parameters
 	//
-	printf("Rendering scene using my fantastic ray tracer ...\n");
+	printf("Rendering scene using my fantastic ray tracer...\n");
 	ray_trace();
 
 	// we want to make sure that intensity values are normalized
