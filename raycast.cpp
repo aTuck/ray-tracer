@@ -78,8 +78,9 @@ int step_max = 1;
 
 // You can put your flags here
 // a flag to indicate whether you want to have shadows
-int shadow_on = 0;
-
+int shadow_on     = 0;
+int reflection_on = 0;
+int refraction_on = 0;
 
 // OpenGL
 const int NumPoints = 6;
@@ -218,11 +219,13 @@ int main( int argc, char **argv )
 	}
 
 	step_max = atoi(argv[2]); // maximum level of recursions
-
+	
 	// Optional arguments
 	for(int i = 3; i < argc; i++)
 	{
-		if (strcmp(argv[i], "+s") == 0)	shadow_on = 1;
+		if (strcmp(argv[i], "+s") == 0)	shadow_on     = 1;
+		if (strcmp(argv[i], "+l") == 0)	reflection_on = 1;
+		if (strcmp(argv[i], "+r") == 0)	refraction_on = 1;
 	}
 
 	//

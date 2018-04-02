@@ -48,10 +48,8 @@ float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit) {
   float c = (x0 - xc)*(x0 - xc) + (y0 - yc)*(y0 - yc) + (z0 - zc)*(z0 - zc) - r*r;
 
   float discrim = (b*b) - (4*a*c);
-  if (discrim < 0){
-    return -1;
-  }
-  else{
+  if (discrim < 0){ return -1; }
+  else {
     float t1 = ( -b + sqrt(discrim) ) / (2 * a);
     float t2 = ( -b - sqrt(discrim) ) / (2 * a);
 

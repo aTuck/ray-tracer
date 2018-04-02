@@ -44,21 +44,13 @@ extern int step_max;
 /*********************************************************************
  * Phong illumination - you need to implement this!
  *********************************************************************/
-RGB_float phong(Point q, Vector v, Vector n, Spheres *sph) {
+RGB_float phong(Point q, Vector v, Vector n, Vector l, Vector r, Spheres *sph) {
 	RGB_float color;
-
-  Vector l = get_vec(q,  light1);
   float d = vec_len(l);  
-
-  // reflectance vector
-  float dn = vec_dot(l, n);
-  Vector dnn = vec_scale(n, dn);
-  Vector dnn2 = vec_scale(dnn, 2.0);
-  Vector r = vec_minus(l, dnn2);
   
+  normalize(&v);  
   normalize(&n);
   normalize(&l);
-  normalize(&v);
   normalize(&r);
 
   float igar = global_ambient[0];
@@ -91,38 +83,76 @@ RGB_float phong(Point q, Vector v, Vector n, Spheres *sph) {
   float diffuse_specular_r = idr*kdr*vec_dot(n, l) + isr*ksr*pow(fmax(vec_dot(r, v), 0), N); //rv^N or 0
   float diffuse_specular_g = idg*kdg*vec_dot(n, l) + isg*ksg*pow(fmax(vec_dot(r, v), 0), N); //rv^N or 0
   float diffuse_specular_b = idb*kdb*vec_dot(n, l) + isb*ksb*pow(fmax(vec_dot(r, v), 0), N); //rv^N or 0
-
+  
   Spheres * shadow_sph = 0;
-  Point shadow_hit;
-  shadow_sph = intersect_scene(q, l, scene, &shadow_hit, 0);
-
+  if (shadow_on){
+    Point shadow_hit;
+    shadow_sph = intersect_scene(q, l, scene, &shadow_hit, 0);
+  }
   if (shadow_sph != 0){
     color.r = igar*kga + iar*kar;
     color.g = igag*kga + iag*kag;
     color.b = igab*kga + iab*kab;
   }
-  else{
+  else {
     color.r = igar*kga + iar*kar + decay*diffuse_specular_r;
     color.g = igag*kga + iag*kag + decay*diffuse_specular_g;
     color.b = igab*kga + iab*kab + decay*diffuse_specular_b;
   }
 
-  // color.r = 0.1;
-  // color.g = 0.2;
-  // color.b = 0.3;
-
 	return color;
+}
+
+Vector calculate_r(Vector v, Vector n){
+    float v_dot_n = vec_dot(v, n);
+    Vector n_scaled = vec_scale(n, v_dot_n);
+    Vector n_scaled_2 = vec_scale(n_scaled, 2.0);
+    Vector return_vec = vec_minus(v, n_scaled_2);
+
+    return return_vec;
 }
 
 /************************************************************************
  * This is the recursive ray tracer - you need to implement this!
  * You should decide what arguments to use.
  ************************************************************************/
-RGB_float recursive_ray_trace() {
-	RGB_float color;
+RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
+	RGB_float color = background_clr;
+  RGB_float next_color = background_clr;
 
+  Vector next_ray;
+  Point hit;
 
-	return color;
+  Spheres * sph = intersect_scene(initial_pos, ray, scene, &hit, 0);
+
+  if (sph == NULL){ return color; }
+
+  Vector v = get_vec(eye_pos, hit);
+  normalize(&v);
+  Vector n = sphere_normal(hit, sph);
+  normalize(&n);
+  Vector l = get_vec(hit,  light1);
+  normalize(&l);
+  Vector r = calculate_r(l, n);
+  normalize(&r);
+  next_ray = calculate_r(v, n);
+
+  color = phong(hit, v, n, l, r, sph);
+
+  if (step < step_max){
+    next_color = recursive_ray_trace(hit, next_ray, ++step);
+    
+    // next_color didn't hit a sphere, set to nothing
+    // if (next_color.r == background_clr.r){
+    //   next_color.r = 0;
+    //   next_color.g = 0;
+    //   next_color.b = 0;
+    // }
+
+    color = clr_add(color, clr_scale(next_color, sph->reflectance));
+  }
+
+  return color;
 }
 
 /*********************************************************************
@@ -156,18 +186,7 @@ void ray_trace() {
       // initial ray from eye through pixel
       ray = get_vec(eye_pos, cur_pixel_pos);
 
-      // sphere that ray intersected with
-      sph = intersect_scene(eye_pos, ray, scene, hit, 0);
-      
-      if (sph != NULL){ 
-        Vector v = get_vec(eye_pos, *hit);
-        Vector n = sphere_normal(*hit, sph);
-        ret_color = phong(*hit, v, n, sph);
-      }
-      else{
-        ret_color = background_clr;
-      }
-      //ret_color = recursive_ray_trace();
+      ret_color = recursive_ray_trace(eye_pos, ray, 0);
 
       // Parallel rays can be cast instead using below
       //
