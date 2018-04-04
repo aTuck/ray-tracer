@@ -177,7 +177,7 @@ RGB_float phong(Point q, Vector v, Vector n, Vector l, Vector r, Spheres *sph) {
 	return color;
 }
 
-RGB_float stochastic_ray_trace(int step, Point hit, Spheres * sph){
+RGB_float stochastic_ray_trace(int step, Point hit, Spheres * sph, Vector reflected_ray){
   Vector random_ray;
   RGB_float temp_color = background_clr;
   RGB_float color = background_clr;
@@ -185,7 +185,7 @@ RGB_float stochastic_ray_trace(int step, Point hit, Spheres * sph){
   for (int i = 0; i < MAX_STOCHASTIC; i++){
     do {
       random_ray = generate_random_ray();
-    } while (vec_dot(random_ray, );
+    } while (vec_dot(random_ray, reflected_ray) < 0.995);
     temp_color = recursive_ray_trace(hit, random_ray, ++step);
 
     // combine colors
@@ -249,12 +249,6 @@ RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
   if (step < step_max){
     int avg = 1;
 
-    if (stochastic_on){
-      stochastic_color = stochastic_ray_trace(step, hit, sph);
-
-      ret_color = clr_add(ret_color, clr_scale(stochastic_color, sph->reflectance));
-      avg++;
-    }
     if (reflection_on){
       reflected_ray = reflect(v, n);
       reflected_color = recursive_ray_trace(hit, reflected_ray, ++step);
@@ -262,6 +256,13 @@ RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
       ret_color = clr_add(ret_color, clr_scale(reflected_color, sph->reflectance));
       avg++;
     }
+    if (stochastic_on){
+      stochastic_color = stochastic_ray_trace(step, hit, sph, reflected_ray);
+
+      ret_color = clr_add(ret_color, clr_scale(stochastic_color, sph->reflectance));
+      avg++;
+    }
+
     if (refraction_on){
       // get rid of phong shading
       set_to_black(&ret_color);
