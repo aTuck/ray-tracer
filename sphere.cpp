@@ -20,6 +20,8 @@ float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit) {
   // d (dx,dy,dz) is direction 
   // t (t1,t2) is parameter
   
+  normalize(&d);
+
   // initial point coords
   float x0 = u.x;
   float y0 = u.y;
@@ -61,11 +63,45 @@ float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit) {
 
       return t2;
     }
+    else{
+      Vector scaled_vec = vec_scale(d, t1);
+      hit->x = x0 + scaled_vec.x;
+      hit->y = y0 + scaled_vec.y;
+      hit->z = z0 + scaled_vec.z;
+
+      return t1;
+    }
   }
 
   return -1;
 }
 
+float intersect_plane(Point u, Vector d, Spheres * sph, Point *hit){
+  Vector n = {0.0, 1.0, 0.0};
+  normalize(&n);
+  normalize(&d);
+
+  Point center = sph->center;
+  Point origin = u;
+
+  float tol = 0.001;
+  float denom = vec_dot(n, d);
+  if (denom > tol){
+    Vector center_to_origin = get_vec(center, origin);
+    normalize(&center_to_origin);
+
+    float t = (vec_dot(center_to_origin, n) / denom);
+    if (t >= tol){
+      Vector scaled_vec = vec_scale(d, t);
+      hit->x = u.x + scaled_vec.x;
+      hit->y = u.y + scaled_vec.y;
+      hit->z = u.z + scaled_vec.z;
+
+      return t;
+    }
+  }
+  return -1.0;
+}
 /*********************************************************************
  * This function returns a pointer to the sphere object that the
  * ray intersects first; NULL if no intersection. You should decide
@@ -78,14 +114,19 @@ Spheres* intersect_scene(Point u, Vector d, Spheres* sph, Point* hit, int n) {
   Point temp_hit;
   
   float closest_param = -2;
-  float param;
-  float tol = 0.0001;
+  float param = -1;
+  float tol = 0.001;
 
   normalize(&d);
 
   do {
-    param = intersect_sphere(u, d, temp, &temp_hit);
-    if ((param < closest_param && param != -1) || (closest_param == -2 && param != -1)){
+    if (sph->shape == 0){
+      param = intersect_sphere(u, d, temp, &temp_hit);
+    }
+    else{
+      param = intersect_plane(u, d, temp, &temp_hit);
+    }
+    if ((closest_param == -2 || param < closest_param) && param != -1){
       if (param > tol){
         closest_param = param;
         closest_sph = temp;
@@ -112,7 +153,7 @@ Spheres* intersect_scene(Point u, Vector d, Spheres* sph, Point* hit, int n) {
  *****************************************************/
 Spheres *add_sphere(Spheres *slist, Point ctr, float rad, float amb[],
 		    float dif[], float spe[], float shine, 
-		    float refl, float ior, int sindex) {
+		    float refl, float ior, int shape, int sindex) {
   Spheres *new_sphere;
 
   new_sphere = (Spheres *)malloc(sizeof(Spheres));
@@ -131,6 +172,7 @@ Spheres *add_sphere(Spheres *slist, Point ctr, float rad, float amb[],
   new_sphere->mat_shineness = shine;
   new_sphere->reflectance = refl;
   new_sphere->ior = ior;
+  new_sphere->shape = shape;
   new_sphere->next = NULL;
 
   if (slist == NULL) { // first object

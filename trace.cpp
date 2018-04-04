@@ -37,20 +37,21 @@ extern float decay_a;
 extern float decay_b;
 extern float decay_c;
 
+// command line arguments
 extern int shadow_on;
 extern int reflection_on;
 extern int refraction_on;
 extern int stochastic_on;
+extern int chessboard_on;
+extern int supersample_on;
 extern int step_max;
 
-// declaration so stochastic/recursive can call each other
+// function declaration so stochastic/recursive can call each other
 RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step);
 
 /////////////////////////////////////////////////////////////////////
 
-/*********************************************************************
- * Phong illumination - you need to implement this!
- *********************************************************************/
+
 
 Vector reflect(Vector v, Vector n){
     float v_dot_n = vec_dot(v, n);
@@ -86,6 +87,16 @@ Vector refract(Vector v, Vector n, Spheres * sph){
   return refracted_ray;
 }
 
+Vector generate_random_ray(){
+  Vector random_ray;
+
+  random_ray.x = (float)rand() / (float)(RAND_MAX/2) - 1;
+  random_ray.y = (float)rand() / (float)(RAND_MAX/2) - 1;
+  random_ray.z = (float)rand() / (float)(RAND_MAX/2) - 1;
+
+  return random_ray;
+}
+
 void vec_print(Vector v){
   printf("%f, %f, %f\n", v.x, v.y, v.z);
 }
@@ -100,9 +111,13 @@ RGB_float check_for_negative_rgb(RGB_float c){
   if (c.r < 0){c.r = 0;}
   if (c.g < 0){c.g = 0;}
   if (c.b < 0){c.b = 0;}
+
   return c;
 }
 
+/***********************
+ * Phong illumination 
+ ***********************/
 RGB_float phong(Point q, Vector v, Vector n, Vector l, Vector r, Spheres *sph) {
 	RGB_float color;
   float d = vec_len(l);  
@@ -162,41 +177,37 @@ RGB_float phong(Point q, Vector v, Vector n, Vector l, Vector r, Spheres *sph) {
 	return color;
 }
 
-RGB_float stochastic_ray_trace(Vector ray, int step, Point hit, Spheres * sph){
-  RGB_float color;
-  RGB_float next_color;
+RGB_float stochastic_ray_trace(int step, Point hit, Spheres * sph){
   Vector random_ray;
-
+  RGB_float temp_color = background_clr;
+  RGB_float color = background_clr;
+  
   for (int i = 0; i < MAX_STOCHASTIC; i++){
     do {
-      // random floats between -1 and 1
-      random_ray.x = (float)rand() / (float)(RAND_MAX/2) - 1;
-      random_ray.y = (float)rand() / (float)(RAND_MAX/2) - 1;
-      random_ray.z = (float)rand() / (float)(RAND_MAX/2) - 1;
-      
-      // debug
-      // vec_print(random_ray);
-      
-      normalize(&random_ray);
-      normalize(&ray);
-    } while (vec_dot(ray, random_ray) >= .95); // make sure vectors aren't too similar
+      random_ray = generate_random_ray();
+    } while (vec_dot(random_ray, );
+    temp_color = recursive_ray_trace(hit, random_ray, ++step);
 
-    next_color = recursive_ray_trace(hit, random_ray, ++step); 
-
-    // ray cast didn't hit a sphere, set to nothing (black)
-    if (next_color.r == background_clr.r){ set_to_black( &next_color ); }
-    
-    clr_add(color, clr_scale(next_color, sph->reflectance));
+    // combine colors
+    color =  clr_add(color, temp_color);
   }
 
-  // as colors accumulate they violate 0 <= rgb <= 1, scale them back into range
-  return clr_scale(color, 1/MAX_STOCHASTIC);
+  // modify color by diffuse
+  color.r = color.r * sph->mat_diffuse[0];
+  color.g = color.g * sph->mat_diffuse[1];
+  color.b = color.b * sph->mat_diffuse[2];
+
+  // take average color
+  color.r = color.r/MAX_STOCHASTIC;
+  color.g = color.g/MAX_STOCHASTIC;
+  color.b = color.b/MAX_STOCHASTIC;
+
+  return color;
 }
 
-/************************************************************************
- * This is the recursive ray tracer - you need to implement this!
- * You should decide what arguments to use.
- ************************************************************************/
+/**********************************
+ * This is the recursive ray tracer
+ ***********************************/
 RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
 	RGB_float ret_color = background_clr;
   RGB_float phong_color = background_clr;
@@ -205,6 +216,7 @@ RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
   RGB_float refracted_color = background_clr;
   Vector reflected_ray;
   Vector refracted_ray;
+  Vector random_ray;
   Point hit;
 
   // check for intersect
@@ -217,7 +229,13 @@ RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
   // intersect exists, do phong shading
   Vector v = get_vec(eye_pos, hit);
   normalize(&v);
-  Vector n = sphere_normal(hit, sph);
+  Vector n;
+  if (sph->shape == 0){
+      n = sphere_normal(hit, sph);
+  }
+  else{
+      n = {0.0, 1.0, 0.0};
+  }
   normalize(&n);
   Vector l = get_vec(hit,  light1);
   normalize(&l);
@@ -229,40 +247,42 @@ RGB_float recursive_ray_trace(Point initial_pos, Vector ray, int step) {
   ret_color = phong_color;
 
   if (step < step_max){
+    int avg = 1;
+
     if (stochastic_on){
-      stochastic_color = stochastic_ray_trace(reflected_ray, ++step, hit, sph);
+      stochastic_color = stochastic_ray_trace(step, hit, sph);
+
+      ret_color = clr_add(ret_color, clr_scale(stochastic_color, sph->reflectance));
+      avg++;
     }
     if (reflection_on){
       reflected_ray = reflect(v, n);
-      normalize(&reflected_ray);
-
       reflected_color = recursive_ray_trace(hit, reflected_ray, ++step);
+
+      ret_color = clr_add(ret_color, clr_scale(reflected_color, sph->reflectance));
+      avg++;
     }
     if (refraction_on){
+      // get rid of phong shading
       set_to_black(&ret_color);
 
       refracted_ray = refract(ray, n, sph);
-      normalize(&refracted_ray);
-
       refracted_color = recursive_ray_trace(hit, refracted_ray, ++step);
+
+      ret_color = clr_add(ret_color, refracted_color);
+      avg++;
     }
 
-    // ray cast didn't hit a sphere, set color to nothing (black)
-    if (stochastic_color.r == background_clr.r){ set_to_black(&stochastic_color); }
-    if (refracted_color.r == background_clr.r){ set_to_black(&refracted_color); }
-    if (reflected_color.r == background_clr.r){ set_to_black(&reflected_color); }
+    // take average color
+    ret_color.r = ret_color.r/avg;
+    ret_color.g = ret_color.g/avg;
+    ret_color.b = ret_color.b/avg;
 
-    // combine all colors
-    ret_color = clr_add(ret_color, clr_scale(reflected_color, sph->reflectance));
-    ret_color = clr_add(ret_color, refracted_color);
-    ret_color = clr_add(ret_color, stochastic_color);
-
-    // give back to recursing functions
-    return check_for_negative_rgb(ret_color);
+    // give back color to recursing functions
+    return ret_color;
   }
 
-  // final return
-  return check_for_negative_rgb(ret_color);
+  return ret_color;
 }
 
 /*********************************************************************
@@ -295,15 +315,60 @@ void ray_trace() {
     for (j=0; j<win_width; j++) {
       // initial ray from eye through pixel
       ray = get_vec(eye_pos, cur_pixel_pos);
-
       ret_color = recursive_ray_trace(eye_pos, ray, 0);
 
-      // Parallel rays can be cast instead using below
-      //
-      // ray.x = ray.y = 0;
-      // ray.z = -1.0;
-      // ret_color = recursive_ray_trace(cur_pixel_pos, ray, 1);
+      // do four corner rays and average
+      if (supersample_on){
+        // extra ray cast positions
+        Point temp_pixel_pos;
+        temp_pixel_pos.z = image_plane;
+        
+        // colors
+        RGB_float topleft_clr;
+        RGB_float topright_clr;
+        RGB_float botleft_clr;
+        RGB_float botright_clr;
 
+        // distance from initial ray modifier (higher value is closer to center)
+        int dist_from_center = 4;
+        
+        // top left
+        temp_pixel_pos.x = cur_pixel_pos.x - (x_grid_size/dist_from_center);
+        temp_pixel_pos.y = cur_pixel_pos.y - (y_grid_size/dist_from_center);
+        ray = get_vec(eye_pos, temp_pixel_pos);
+        topleft_clr = recursive_ray_trace(eye_pos, ray, 0);
+
+        // top right
+        temp_pixel_pos.x = cur_pixel_pos.x + (x_grid_size/dist_from_center);
+        temp_pixel_pos.y = cur_pixel_pos.y - (y_grid_size/dist_from_center);
+        ray = get_vec(eye_pos, temp_pixel_pos);
+        topright_clr = recursive_ray_trace(eye_pos, ray, 0);
+
+        // bottom left
+        temp_pixel_pos.x = cur_pixel_pos.x - (x_grid_size/dist_from_center);
+        temp_pixel_pos.y = cur_pixel_pos.y + (y_grid_size/dist_from_center);
+        ray = get_vec(eye_pos, temp_pixel_pos);
+        botleft_clr = recursive_ray_trace(eye_pos, ray, 0);
+        
+        // bottom right
+        temp_pixel_pos.x = cur_pixel_pos.x + (x_grid_size/dist_from_center);
+        temp_pixel_pos.y = cur_pixel_pos.y + (y_grid_size/dist_from_center);
+        ray = get_vec(eye_pos, temp_pixel_pos);
+        botright_clr = recursive_ray_trace(eye_pos, ray, 0);
+
+        // combine
+        ret_color = clr_add(ret_color, topleft_clr );
+        ret_color = clr_add(ret_color, topright_clr);
+        ret_color = clr_add(ret_color, botleft_clr );
+        ret_color = clr_add(ret_color, botright_clr);
+
+        // average
+        ret_color.r = ret_color.r/5;
+        ret_color.g = ret_color.g/5;
+        ret_color.b = ret_color.b/5;
+      }
+
+      check_for_negative_rgb(ret_color);
       frame[i][j][0] = GLfloat(ret_color.r);
       frame[i][j][1] = GLfloat(ret_color.g);
       frame[i][j][2] = GLfloat(ret_color.b);
@@ -317,3 +382,9 @@ void ray_trace() {
 
   free(hit);
 }
+
+// Parallel rays can be cast instead using below
+//
+// ray.x = ray.y = 0;
+// ray.z = -1.0;
+// ret_color = recursive_ray_trace(cur_pixel_pos, ray, 1);
