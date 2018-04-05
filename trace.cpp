@@ -108,10 +108,13 @@ void set_to_black(RGB_float * c){
 }
 
 RGB_float check_for_negative_rgb(RGB_float c){
-  if (c.r < 0){c.r = 0;}
-  if (c.g < 0){c.g = 0;}
-  if (c.b < 0){c.b = 0;}
+  if (c.r <= 0.01){c.r = 0.0;}
+  if (c.g <= 0.01){c.g = 0.0;}
+  if (c.b <= 0.01){c.b = 0.0;}
 
+  // if (c.r > 1.00){c.r = 1.0;}
+  // if (c.g > 1.00){c.g = 1.0;}
+  // if (c.b > 1.00){c.b = 1.0;}
   return c;
 }
 
@@ -369,7 +372,8 @@ void ray_trace() {
         ret_color.b = ret_color.b/5;
       }
 
-      check_for_negative_rgb(ret_color);
+      ret_color = check_for_negative_rgb(ret_color);
+      // printf("%f, %f, %f\n", ret_color.r, ret_color.g, ret_color.b);
       frame[i][j][0] = GLfloat(ret_color.r);
       frame[i][j][1] = GLfloat(ret_color.g);
       frame[i][j][2] = GLfloat(ret_color.b);

@@ -155,7 +155,7 @@ void set_up_user_scene() {
 		         sphere3_reflectance, sphere3_ior, sphere3_shape, 3);
 
   //chess board
-  Point sphere4_ctr = {0.00, -200.00, -600.00};
+  Point sphere4_ctr = {0.00, -5.00, -5.00};
   float sphere4_rad = 2;
   float sphere4_ambient[] = {0.2, 0.2, 0.2};
   float sphere4_diffuse[] = {1.1, 0.1, 0.1};

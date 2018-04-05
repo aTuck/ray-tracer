@@ -1,0 +1,7 @@
+to run
+
+make clean
+make
+./raycast [-d | -u] (1-10) +s +l +p +f (can use +r but not working 100% correctly)
+
+To run with "chess board" use -u instead of -d, I have plane intersection working but plane is not placed properly in scene

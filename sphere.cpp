@@ -15,11 +15,10 @@ extern Spheres *scene;
  * If there is an intersection, the point of intersection should be
  * stored in the "hit" variable
  **********************************************************************/
-float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit) {
+float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit, float * dist) {
   // u (x0,y0,z0) is eye 
   // d (dx,dy,dz) is direction 
   // t (t1,t2) is parameter
-  
   normalize(&d);
 
   // initial point coords
@@ -60,6 +59,7 @@ float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit) {
       hit->x = x0 + scaled_vec.x;
       hit->y = y0 + scaled_vec.y;
       hit->z = z0 + scaled_vec.z;
+      *dist = vec_len(get_vec(u, *hit));
 
       return t2;
     }
@@ -68,20 +68,21 @@ float intersect_sphere(Point u, Vector d, Spheres *sph, Point *hit) {
       hit->x = x0 + scaled_vec.x;
       hit->y = y0 + scaled_vec.y;
       hit->z = z0 + scaled_vec.z;
+      *dist = vec_len(get_vec(u, *hit));
 
       return t1;
     }
   }
-
   return -1;
 }
 
-float intersect_plane(Point u, Vector d, Spheres * sph, Point *hit){
+float intersect_plane(Point u, Vector d, Spheres * sph, Point *hit, float * dist){
   Vector n = {0.0, 1.0, 0.0};
   normalize(&n);
   normalize(&d);
 
   Point center = sph->center;
+  float len = sph->radius;
   Point origin = u;
 
   float tol = 0.001;
@@ -96,6 +97,22 @@ float intersect_plane(Point u, Vector d, Spheres * sph, Point *hit){
       hit->x = u.x + scaled_vec.x;
       hit->y = u.y + scaled_vec.y;
       hit->z = u.z + scaled_vec.z;
+
+      Vector center_to_edge = get_vec(center, *hit);
+      float hyp = sqrt(pow((len/2), 2) + (len*len));
+      float angle = acos((len/2)/hyp);
+      float c = cos(angle);
+      float s = sin(angle);
+      float x = sin(c)*(len/2);
+      float y = tan(angle) * x;
+      if (x > 5.0 || y > 5.0){
+        printf("x or y too big\n");
+        return -1;
+      }
+      // *dist = vec_len(center_to_edge);
+      // if (*dist > 5){
+      //   return -1;
+      // }
 
       return t;
     }
@@ -115,19 +132,22 @@ Spheres* intersect_scene(Point u, Vector d, Spheres* sph, Point* hit, int n) {
   
   float closest_param = -2;
   float param = -1;
+  float closest_dist = -2;
+  float* dist = (float*)malloc(sizeof(float*));
   float tol = 0.001;
 
   normalize(&d);
 
   do {
-    if (sph->shape == 0){
-      param = intersect_sphere(u, d, temp, &temp_hit);
+    if (temp->shape == 0){
+      param = intersect_sphere(u, d, temp, &temp_hit, dist);
     }
     else{
-      param = intersect_plane(u, d, temp, &temp_hit);
+      param = intersect_plane(u, d, temp, &temp_hit, dist);
     }
     if ((closest_param == -2 || param < closest_param) && param != -1){
       if (param > tol){
+        // printf("closest_param was %f, is now %f, closest_sph is now %i\n", closest_param, param, sph->index);
         closest_param = param;
         closest_sph = temp;
         hit->x = temp_hit.x;
